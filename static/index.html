@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arena 歷史排行榜</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=DM+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,300;8..60,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <!-- App nav -->
+  <nav class="appnav">
+    <div class="brand"><span class="brand-mark">🏛</span><span class="brand-name">Arena</span><span class="brand-sub">History</span></div>
+    <div class="nav-item active"><svg viewBox="0 0 16 16"><path d="M3 13V8M8 13V3M13 13V6" /></svg>Leaderboard<span class="tag">歷史</span></div>
+    <div class="nav-label">Arenas</div>
+    <div id="arenaNav"></div>
+    <div class="nav-foot">
+      資料來源：<a href="https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset" target="_blank" rel="noopener">lmarena-ai/leaderboard-dataset</a>（CC-BY-4.0）
+    </div>
+  </nav>
+
+  <!-- Filter sidebar -->
+  <aside class="filters" id="filters">
+    <div class="filters-top"><span class="crumb"><svg viewBox="0 0 16 16"><path d="M3 13V8M8 13V3M13 13V6" /></svg>Overview</span></div>
+
+    <section class="fsec">
+      <div class="fsec-h"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></svg>時間點</div>
+      <label class="field-label" for="dateInput">選擇日期</label>
+      <input type="date" id="dateInput" class="date-input">
+      <div class="step">
+        <button id="prevBtn" class="seg-btn" title="上一次發布">‹ 上一版</button>
+        <button id="nextBtn" class="seg-btn" title="下一次發布">下一版 ›</button>
+        <button id="latestBtn" class="seg-btn" title="最新一版">最新</button>
+      </div>
+      <label class="field-label" for="snapSelect">或直接挑發布日</label>
+      <select id="snapSelect" class="select"></select>
+      <div class="resolved" id="resolvedNote"></div>
+    </section>
+
+    <section class="fsec">
+      <div class="fsec-h"><svg viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11"/></svg>分類 <span class="muted" id="catCount"></span></div>
+      <div id="catList" class="cat-list"></div>
+      <button class="view-more" id="catMore">+ 顯示更多</button>
+    </section>
+
+    <section class="fsec" id="adjSec">
+      <div class="fsec-h"><svg viewBox="0 0 16 16"><path d="M3 5h10M3 11h10"/><circle cx="6" cy="5" r="1.6"/><circle cx="10" cy="11" r="1.6"/></svg>Adjustments</div>
+      <div id="adjList" class="radio-list"></div>
+    </section>
+
+    <section class="fsec">
+      <div class="fsec-h"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 7.5v3.5M8 5h.01"/></svg>License Type</div>
+      <div class="radio-list" id="licList">
+        <label class="radio"><input type="radio" name="lic" value="all" checked><span></span>All</label>
+        <label class="radio"><input type="radio" name="lic" value="prop"><span></span>Proprietary</label>
+        <label class="radio"><input type="radio" name="lic" value="open"><span></span>Open Source</label>
+      </div>
+    </section>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <main class="content">
+      <div class="head">
+        <div class="title-row">
+          <h1 id="title">Text Arena</h1>
+          <span class="chip" id="catChip">🏆 Overall</span>
+        </div>
+        <p class="desc" id="desc"></p>
+        <div class="meta">
+          <span><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></svg><b id="mDate"></b></span>
+          <span><svg viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="M5.5 8l2 2 3-4"/></svg><span id="mVotes"></span></span>
+          <span><svg viewBox="0 0 16 16"><ellipse cx="8" cy="4" rx="5" ry="2"/><path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/></svg><span id="mModels"></span></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="toolbar">
+          <button class="ghost" id="toggleFilters"><svg viewBox="0 0 16 16"><path d="M3 5h10M3 11h10"/><circle cx="6" cy="5" r="1.6"/><circle cx="10" cy="11" r="1.6"/></svg><span id="toggleLabel">Hide Filters</span></button>
+          <div class="toolbar-r">
+            <div class="seg"><button class="seg-btn on" data-view="models">Models</button><button class="seg-btn" data-view="labs">Labs</button></div>
+            <span class="vsep"></span>
+            <div class="search"><svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg><input id="search" placeholder="搜尋模型或廠商"></div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead id="thead"></thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+        <div class="empty" id="empty" hidden>這個時間點沒有符合條件的資料。</div>
+      </div>
+      <p class="note">「排名區間」依信賴區間推算：最佳名次＝信賴區間下界高於本模型上界的模型數＋1，最差名次＝上界達到本模型下界的模型數。「變動」比較的是同一分類的上一次發布。</p>
+    </main>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
