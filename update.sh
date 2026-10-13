@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Download / refresh the full leaderboard history from Hugging Face into ./data
+# Download the latest dataset revision from Hugging Face and rebuild ./site
 set -euo pipefail
 cd "$(dirname "$0")"
-hf download lmarena-ai/leaderboard-dataset --repo-type dataset --include "*/full-*" --local-dir data
-du -sh data
+uv run build.py --sync "$@"

@@ -1,0 +1,63 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 * * * *" # hourly: rebuild only if the dataset has a new revision
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  DATASET: lmarena-ai/leaderboard-dataset
+  SITE_URL: https://josh.hu/arena-history
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - name: Check for a new dataset revision
+        id: check
+        run: |
+          remote=$(curl -fsSL "https://huggingface.co/api/datasets/$DATASET" | jq -r .sha)
+          deployed=$(curl -fsSL "$SITE_URL/meta.json" | jq -r .revision || true)
+          echo "remote=$remote deployed=$deployed"
+          if [ "$GITHUB_EVENT_NAME" = "schedule" ] && [ "$remote" = "$deployed" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.skip != 'true'
+
+      - uses: astral-sh/setup-uv@v6
+        if: steps.check.outputs.skip != 'true'
+
+      - name: Build site
+        if: steps.check.outputs.skip != 'true'
+        run: uv run build.py --sync --interval 60
+
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.check.outputs.skip != 'true'
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -2,3 +2,6 @@ data/
 tmpcode/
 .DS_Store
 __pycache__/
+site/
+site.tmp/
+site.old/

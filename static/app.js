@@ -98,14 +98,13 @@ function readHash() {
   const p = new URLSearchParams(location.hash.slice(1));
   if (p.get("arena") && arenaById(p.get("arena"))) state.arena = p.get("arena");
   state.variant = p.get("adj") || null;
-  state.date = p.get("date") || "";
+  // The date is deliberately not kept in the URL: every visit or refresh starts at today's leaderboard.
   state.category = p.get("cat") || "overall";
 }
 function writeHash() {
   const p = new URLSearchParams();
   p.set("arena", state.arena);
   p.set("adj", currentVariant().id);
-  if (state.date) p.set("date", state.date);
   p.set("cat", state.category);
   history.replaceState(null, "", "#" + p.toString());
 }
@@ -182,8 +181,9 @@ function renderDateControls() {
   const ds = v.dates;
   const inp = $("#dateInput");
   inp.min = ds[0];
-  inp.max = new Date().toISOString().slice(0, 10);
-  inp.value = state.date || (BOARD ? BOARD.date : ds[ds.length - 1]);
+  const today = localToday();
+  inp.max = today;
+  inp.value = state.date || today;
 
   const sel = $("#snapSelect");
   sel.innerHTML = ds.slice().reverse().map((d) => `<option value="${d}">${d}</option>`).join("");
@@ -197,11 +197,16 @@ function renderDateControls() {
   if (!BOARD) { note.textContent = ""; return; }
   const idx = ds.indexOf(BOARD.date) + 1;
   let msg = `顯示 <b>${BOARD.date}</b> 發布的版本（第 ${idx} / ${ds.length} 版）`;
-  if (state.date && state.date !== BOARD.date) {
+  if (!state.date || (state.date >= today && !BOARD.next)) {
+    msg = `今天（${today}）的最新榜是 <b>${BOARD.date}</b> 發布的版本（第 ${idx} / ${ds.length} 版）。`;
+  } else if (state.date !== BOARD.date) {
     msg = state.date < ds[0]
       ? `${state.date} 早於這個榜第一次發布，改顯示最早的 <b>${BOARD.date}</b>。`
       : `${state.date} 當天看到的是 <b>${BOARD.date}</b> 發布的版本（第 ${idx} / ${ds.length} 版）。`;
   }
+  const built = new Date(META.built_at);
+  const builtText = `${built.getMonth() + 1}/${built.getDate()} ${hhmm(META.built_at)}`;
+  msg += `<br>每 ${META.check_interval_minutes} 分鐘自動檢查新資料，最近一次更新在 ${builtText}。`;
   note.innerHTML = msg;
 }
 
@@ -235,6 +240,11 @@ const fmtCI = (r) => {
   return "±" + (isAgent() ? half.toFixed(3) : Math.round(half));
 };
 const fmtInt = (x) => (x == null ? "—" : Math.round(x).toLocaleString("en-US"));
+const localToday = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+const hhmm = (iso) => (iso ? new Date(iso).toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit", hour12: false }) : "—");
 const isOpen = (lic) => lic && !/proprietary/i.test(lic);
 
 function filteredRows() {
@@ -376,6 +386,24 @@ function renderHead() {
 }
 
 // ---------- Data ----------
+// Static files from build.py: meta.json lists publish dates and categories per config, and
+// data/<config>/<date>/<category>.json holds one leaderboard as arrays in META.cols order.
+async function fetchBoard(config, date, category) {
+  const { dates, categories } = META.configs[config];
+  const eligible = date ? dates.filter((d) => d <= date) : dates;
+  const cur = eligible.length ? eligible[eligible.length - 1] : dates[0];
+  const i = dates.indexOf(cur);
+  const cats = categories[cur];
+  if (!cats.includes(category)) category = cats.includes("overall") ? "overall" : cats[0];
+  const res = await fetch(`data/${config}/${cur}/${encodeURIComponent(category)}.json`);
+  const rows = (await res.json()).map((a) => Object.fromEntries(META.cols.map((c, j) => [c, a[j]])));
+  return {
+    config, requested: date, date: cur, category, categories: cats, rows,
+    prev: dates[i - 1] || null, next: dates[i + 1] || null,
+    models: rows.length, total_votes: rows.reduce((s, r) => s + (r.votes || 0), 0),
+  };
+}
+
 async function load() {
   const v = currentVariant();
   state.variant = v.id;
@@ -383,9 +411,7 @@ async function load() {
   renderAdjustments();
   const seq = ++reqSeq;
   document.body.classList.add("loading");
-  const p = new URLSearchParams({ config: v.config, date: state.date, category: state.category });
-  const res = await fetch("/api/board?" + p);
-  const data = await res.json();
+  const data = await fetchBoard(v.config, state.date, state.category);
   if (seq !== reqSeq) return;
   document.body.classList.remove("loading");
   BOARD = data;
@@ -424,7 +450,9 @@ function bind() {
 }
 
 (async function init() {
-  META = await (await fetch("/api/meta")).json();
+  // Revalidate so a refresh always sees the newest build (GitHub Pages caches for 10 minutes).
+  META = await (await fetch("meta.json", { cache: "no-cache" })).json();
+  for (const a of META.arenas) for (const v of a.variants) v.dates = META.configs[v.config].dates;
   readHash();
   bind();
   // replaceState() in writeHash() doesn't fire this, so it only runs on manual URL edits.
